@@ -26,20 +26,34 @@ class DataManager:
 
 
 class Calculated(DataManager):
+    PANDAS_MAP = {}
+    PROTO_MAP = {}
+    BROKEN = []
 
     def get_replay_list(self, num=50):
-        r = requests.get(BASE_URL + 'replays?key=1&minrank=19&teamsize=3')
-        return [replay['id'] for replay in r.json()['data']]
+        r = requests.get(BASE_URL + 'replays?key=1&minrank=19&teamsize=3&num={}'.format(num))
+        return [replay['hash'] for replay in r.json()['data']]
 
     def get_pandas(self, id_):
+        if id_ in self.BROKEN:
+            return None
+        if id_ in self.PANDAS_MAP:
+            return self.PANDAS_MAP[id_]
         url = BASE_URL + 'parsed/{}.replay.gzip?key=1'.format(id_)
         r = requests.get(url)
         gzip_file = gzip.GzipFile(fileobj=io.BytesIO(r.content), mode='rb')
-
-        pandas_ = PandasManager.safe_read_pandas_to_memory(gzip_file)
+        try:
+            pandas_ = PandasManager.safe_read_pandas_to_memory(gzip_file)
+        except:
+            self.PANDAS_MAP[id_] = None
+            self.BROKEN.append(id_)
+            return None
+        self.PANDAS_MAP[id_] = pandas_
         return pandas_
 
     def get_proto(self, id_):
+        if id_ in self.PROTO_MAP:
+            return self.PROTO_MAP[id_]
         url = BASE_URL + 'parsed/{}.replay.pts?key=1'.format(id_)
         r = requests.get(url)
         #     file_obj = io.BytesIO()
@@ -47,6 +61,7 @@ class Calculated(DataManager):
         #         if chunk: # filter out keep-alive new chunks
         #             file_obj.write(chunk)
         proto = ProtobufManager.read_proto_out_from_file(io.BytesIO(r.content))
+        self.PROTO_MAP[id_] = proto
         return proto
 
 
