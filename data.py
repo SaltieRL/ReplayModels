@@ -13,7 +13,19 @@ from carball.generated.api.game_pb2 import Game
 BASE_URL = 'https://calculated.gg/api/v1/'
 
 
-class Calculated:
+class DataManager:
+
+    def get_replay_list(self, num: int = 50):
+        raise NotImplementedError()
+
+    def get_pandas(self, id_: str):
+        raise NotImplementedError()
+
+    def get_proto(self, id_: str):
+        raise NotImplementedError()
+
+
+class Calculated(DataManager):
 
     def get_replay_list(self, num=50):
         r = requests.get(BASE_URL + 'replays?key=1&minrank=19&teamsize=3')
@@ -38,11 +50,11 @@ class Calculated:
         return proto
 
 
-class Carball:
+class Carball(DataManager):
     REPLAYS_DIR = 'replays'
     REPLAYS_MAP = {}
 
-    def get_replay_list(self):
+    def get_replay_list(self, num=50):
         replays = glob.glob(os.path.join(self.REPLAYS_DIR, '*.replay'))
         return [os.path.basename(replay).split('.')[0] for replay in replays]
 
