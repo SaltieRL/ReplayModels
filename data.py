@@ -30,8 +30,8 @@ class Calculated(DataManager):
     PROTO_MAP = {}
     BROKEN = []
 
-    def get_replay_list(self, num=50):
-        r = requests.get(BASE_URL + 'replays?key=1&minrank=19&teamsize=3&num={}'.format(num))
+    def get_replay_list(self, num=50, page=1):
+        r = requests.get(BASE_URL + 'replays?key=1&minmmr=1300&maxmmr=1400&playlist=13&num={}&page={}'.format(num, page))
         return [replay['hash'] for replay in r.json()['data']]
 
     def get_pandas(self, id_):
