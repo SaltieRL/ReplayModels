@@ -83,7 +83,7 @@ def get_input_and_output_from_game_datas(df: pd.DataFrame, proto: Game) -> Tuple
     return input_, output
 
 
-data_manager = CalculatedLocalDM(need_df=True, need_proto=True, cache_path=r"C:\Users\harry\Documents\rocket_league\ReplayModels\cache")
+data_manager = CalculatedLocalDM(need_df=True, need_proto=True)
 INPUT_FEATURES = 61
 model = GoalPredictor(INPUT_FEATURES).cuda().train()
 trainer = BatchTrainer(data_manager, model, get_input_and_output_from_game_datas)
