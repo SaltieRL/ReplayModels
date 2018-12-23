@@ -5,7 +5,7 @@ Creates models for Rocket League replay analysis.
 ## Implementation
 ### General classes and modules
 Data retrieval is done through the `DataManager` subclasses (e.g. `CalculatedLocalDM`).
-These subclasses expose a `get_data()` method which retries a `GameData` object (with `.df` and `.proto` attributes).
+These subclasses expose a `get_data()` method which retrieves a `GameData` object (with `.df` and `.proto` attributes).
 
 General utility functions such as filtering columns of the dataframe are available in `data/utils/utils.py`.
 
