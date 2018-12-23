@@ -10,9 +10,9 @@ DataColumn = Union[PlayerColumn, BallColumn, GameColumn]
 
 def flip_teams(df: pd.DataFrame):
     """
-    Modifies dataframe in place so players' teams are effectively swapped.
-    :param df:
-    :return:
+    Modifies df in place so players' teams are effectively swapped.
+    :param df: pd.DataFrame
+    :return: the modified-in-place input pd.DataFrame
     """
     players = [
         name for name in df.columns.get_level_values(level=0).unique()
@@ -33,6 +33,12 @@ def flip_teams(df: pd.DataFrame):
 
 
 def filter_columns(df: pd.DataFrame, columns: Sequence[DataColumn]):
+    """
+    Returns a new pd.DataFrame only containing the given columns.
+    :param df: Replay's df to filter
+    :param columns: Sequence of DataColumns to keep
+    :return: new pd.DataFrame
+    """
     player_df = df.drop(columns=['ball', 'game'], level=0)
     ball_df = df.xs('ball', level=0, axis=1, drop_level=False)
     game_df = df.xs('game', level=0, axis=1, drop_level=False)

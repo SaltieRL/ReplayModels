@@ -23,8 +23,18 @@ logger = logging.getLogger(__name__)
 
 
 class CalculatedLocalDM(DataManager):
-    def __init__(self, need_proto: bool = False, need_df: bool = False, cache_path: str = None):
-        super().__init__(need_proto, need_df)
+    """
+    Caches downloaded dfs and protos into a local directory.
+    Keeps a list of known bad replay ids which fail when read.
+    """
+    def __init__(self, need_proto: bool = False, need_df: bool = False, cache_path: str = None, normalise_df: bool = True):
+        """
+        :param need_proto: Whether to load the .proto attribute when get_data is called.
+        :param need_df: Whether to load the .df attribute when get_data is called.
+        :param cache_path: Defaults to CACHE_FOLDER
+        :param normalise_df: Whether to normalise the df when get_data is called.
+        """
+        super().__init__(need_proto, need_df, normalise_df)
 
         # Ensure cache folder exists
         self.cache_path = cache_path if cache_path is not None else CACHE_FOLDER
@@ -40,17 +50,36 @@ class CalculatedLocalDM(DataManager):
             logger.info(f'Did not find any known bad ids')
             self.known_bad_ids = []
 
-    def get_replay_list(self, num: int = 50, page: int = 1) -> List[str]:
+    def get_replay_list(self, num: int = 50, page: int = 0) -> List[str]:
+        """
+        Returns a list of replay ids.
+        :param num:
+            Capped by server to 200.
+        :param page:
+            Server is currently in a broken state, where subsequent calls with the same page and num
+            return different results. Should be set to 0 as a result to ensure all available replays can be gotten.
+        :return: List of replay ids (str)
+        """
         r = requests.get(BASE_URL + f'replays?key=1&minmmr={MIN_MMR}&maxmmr=3000&playlist=13&num={num}&page={page}')
         return [replay['hash'] for replay in r.json()['data']]
 
-    def add_broken_id(self, id_: str):
+    def add_bad_id(self, id_: str):
+        """
+        Appends id to self.known_bad_ids, and rewrites self.known_bad_ids_filepath to update it.
+        :param id_: known bad replay id
+        :return: None
+        """
         if id_ not in self.known_bad_ids:
             self.known_bad_ids.append(id_)
             with open(self.known_bad_ids_filepath, 'w') as f:
                 json.dump(self.known_bad_ids, f)
 
     def get_df(self, id_: str) -> pd.DataFrame:
+        """
+        Loads df from cache if available, else loads the df from the server and saves it to the cache folder.
+        :param id_: replay id
+        :return: pd.DataFrame
+        """
         if id_ in self.known_bad_ids:
             raise BrokenDataError
 
@@ -73,7 +102,7 @@ class CalculatedLocalDM(DataManager):
                 with open(cached_filepath, 'wb') as f:
                     f.write(r.content)
         except:
-            self.add_broken_id(id_)
+            self.add_bad_id(id_)
             raise BrokenDataError
 
         try:
@@ -84,6 +113,11 @@ class CalculatedLocalDM(DataManager):
         return pandas_
 
     def get_proto(self, id_: str) -> Game:
+        """
+        Loads game proto from cache if available, else loads it from the server and saves it to the cache folder.
+        :param id_: replay id
+        :return: Game protobuf
+        """
         if id_ in self.known_bad_ids:
             raise BrokenDataError
 

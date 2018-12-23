@@ -7,7 +7,9 @@ from torch.nn.modules.loss import _Loss
 @weak_module
 class WeightedMSELoss(_Loss):
     """
-    Weights only the 0.5 values.
+    Weights only the 0.5 values. (All samples are weighted 1 except for the values where target is 0.5)
+    Samples with target 0.5 are weighted 1 / (count of samples with target 0.5).
+
     Can be extended to do a value counts with np.unique(target, return_counts=True).
     But that will be slower and will likely not provide any real gain now.
     """
