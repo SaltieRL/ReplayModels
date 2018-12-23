@@ -1,10 +1,12 @@
+import logging
 from typing import NamedTuple, Optional
 
 import pandas as pd
 from carball.generated.api.game_pb2 import Game
 
-from utils.utils import normalise_df
+from data.utils.utils import normalise_df
 
+logger = logging.getLogger(__name__)
 
 class GameData(NamedTuple):
     proto: Optional[Game]
@@ -38,6 +40,7 @@ class DataManager:
         df = self.get_df(id_) if self.need_df else None
         if self.normalise_df:
             df = normalise_df(df)
+        logger.info(f"Got data for replay: {id_}")
         return GameData(proto, df)
 
     def get_replay_list(self, num: int = 50):

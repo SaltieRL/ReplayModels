@@ -87,13 +87,13 @@ class CalculatedLocalDM(DataManager):
         cached_filepath = os.path.join(self.cache_path, id_ + '.replay.gzip')
         if os.path.exists(cached_filepath):
             gzip_file = gzip.GzipFile(cached_filepath, mode='rb')
-            logger.info(f"Loaded {id_} df from cache.")
+            logger.debug(f"Loaded {id_} df from cache.")
         else:
             url = BASE_URL + f'parsed/{id_}.replay.gzip?key=1'
             r = requests.get(url)
             file = io.BytesIO(r.content)
             gzip_file = gzip.GzipFile(fileobj=file, mode='rb')
-            logger.info(f"Loaded {id_} df from site.")
+            logger.debug(f"Loaded {id_} df from site.")
 
         try:
             pandas_ = PandasManager.safe_read_pandas_to_memory(gzip_file)
@@ -125,12 +125,12 @@ class CalculatedLocalDM(DataManager):
         cached_filepath = os.path.join(self.cache_path, id_ + '.replay.pts')
         if os.path.exists(cached_filepath):
             file = open(cached_filepath, mode='rb')
-            logger.info(f"Loaded {id_} proto from cache.")
+            logger.debug(f"Loaded {id_} proto from cache.")
         else:
             url = BASE_URL + f'parsed/{id_}.replay.pts?key=1'
             r = requests.get(url)
             file = io.BytesIO(r.content)
-            logger.info(f"Loaded {id_} proto from site.")
+            logger.debug(f"Loaded {id_} proto from site.")
 
             with open(cached_filepath, 'wb') as f:
                 f.write(r.content)

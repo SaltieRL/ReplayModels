@@ -3,7 +3,7 @@ from typing import Sequence, Union
 import pandas as pd
 import numpy as np
 
-from utils.columns import PlayerColumn, BallColumn, GameColumn
+from .columns import PlayerColumn, BallColumn, GameColumn
 
 DataColumn = Union[PlayerColumn, BallColumn, GameColumn]
 

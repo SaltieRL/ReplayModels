@@ -1,19 +1,19 @@
 import logging
 from typing import Tuple
 
-import pandas as pd
 import numpy as np
+import pandas as pd
 from carball.generated.api.game_pb2 import Game
 
-from batched_trainer import BatchTrainer
-from calculated_local_dm import CalculatedLocalDM
-from utils.columns import PlayerColumn, BallColumn, GameColumn
-from goal_predictor import GoalPredictor
-from utils.utils import filter_columns
+from value_function.batched_trainer import BatchTrainer
+from data.calculated_local_dm import CalculatedLocalDM
+from data.utils.columns import PlayerColumn, BallColumn, GameColumn
+from data.utils.utils import filter_columns
+from value_function.goal_predictor import GoalPredictor
 
 logger = logging.getLogger(__name__)
 
-logging.basicConfig(level=logging.DEBUG)
+logging.basicConfig(level=logging.INFO)
 
 
 # data_manager = CalculatedDM(need_df=True, need_proto=True)
