@@ -71,5 +71,5 @@ def check_playlist(playlist: int) -> int:
 if __name__ == '__main__':
     # MIN_MMR = 1500
     # check_playlists()
-    MIN_MMR = 1300
+    MIN_MMR = 1500
     check_playlist(13)

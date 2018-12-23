@@ -14,7 +14,8 @@ from carball.generated.api.game_pb2 import Game
 from data.base_data_manager import DataManager, BrokenDataError
 
 BASE_URL = 'https://calculated.gg/api/v1/'
-MIN_MMR = 1300
+MIN_MMR = 1500
+PLAYLIST = 13
 
 
 CACHE_FOLDER = "cache"
@@ -60,7 +61,7 @@ class CalculatedLocalDM(DataManager):
             return different results. Should be set to 0 as a result to ensure all available replays can be gotten.
         :return: List of replay ids (str)
         """
-        r = requests.get(BASE_URL + f'replays?key=1&minmmr={MIN_MMR}&maxmmr=3000&playlist=13&num={num}&page={page}')
+        r = requests.get(BASE_URL + f'replays?key=1&minmmr={MIN_MMR}&maxmmr=3000&playlist={PLAYLIST}&num={num}&page={page}')
         return [replay['hash'] for replay in r.json()['data']]
 
     def add_bad_id(self, id_: str):
