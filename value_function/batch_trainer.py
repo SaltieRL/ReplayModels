@@ -11,6 +11,7 @@ from torch.nn.modules.loss import _Loss
 from torch.optim import Optimizer
 
 from data.base_data_manager import DataManager, BrokenDataError
+from value_function.loss_plotter import LossPlotter
 from .weighted_loss import WeightedMSELoss
 
 logger = logging.getLogger(__name__)
@@ -19,12 +20,13 @@ logger = logging.getLogger(__name__)
 class BatchTrainer:
     def __init__(self, data_manager: DataManager, model: nn.Module,
                  get_input_and_output_from_game_data: Callable[[pd.DataFrame, Game], Tuple[np.ndarray, np.ndarray]],
-                 trace: bool = True, eval_set_length: int = 10):
+                 trace: bool = True, eval_set_length: int = 10, save_on_eval: bool = True):
         self.data_manager = data_manager
         self.model = model
         self.get_input_and_output_from_game_data = get_input_and_output_from_game_data
         self.trace: bool = trace
         self.eval_set_length: int = eval_set_length
+        self.save_on_eval: bool = save_on_eval
 
         self.loss_criterion: _Loss = WeightedMSELoss()
         self.optimizer: Optimizer = optim.Adam(self.model.parameters(), lr=1e-3)
@@ -37,6 +39,8 @@ class BatchTrainer:
 
         self.replays_trained_on = 0
         self.batches_trained_on = 0
+
+        self.loss_plotter = LossPlotter()
 
     def run(self, epochs: int = 200, replays_per_epoch: int = 200, replays_per_batch: int = 5, eval_every: int = 1):
         epoch_losses = []
@@ -74,7 +78,7 @@ class BatchTrainer:
                             self.replays_trained_on += len(input_train_batch)
                             self.batches_trained_on += 1
 
-                            if self.batches_trained_on % eval_every == 50:
+                            if self.batches_trained_on % eval_every == 0:
                                 self._evaluate()
                         except Exception as e:
                             logger.error(f"Unexpected error while training (or evaluating).")
@@ -106,6 +110,9 @@ class BatchTrainer:
         loss = self.loss_criterion(predicted, output_tensor)
 
         logger.debug(f"output shape: {output.shape}")
+
+        self.loss_plotter.update_plot(output, predicted.data.cpu().numpy())
+
         loss.backward()
         self.optimizer.step()
 
@@ -137,12 +144,14 @@ class BatchTrainer:
         self.model.eval()
 
         with torch.no_grad():
-            predicted = self.model(torch.from_numpy(self.eval_inputs))
-            loss = self.loss_criterion(predicted, torch.from_numpy(self.eval_outputs))
+            predicted = self.model(torch.from_numpy(self.eval_inputs).float().cuda())
+            loss = self.loss_criterion(predicted, torch.from_numpy(self.eval_outputs).float().cuda())
             if self.trace:
-                _loss = float(loss.cpu().data.numpy())
-                trace(_loss)
+                evaluation_loss = float(loss.cpu().data.numpy())
+                trace(evaluation_loss)
 
             logger.info(f"evaluation loss: {loss}")
         # Return model to train mode
         self.model.train()
+        if self.save_on_eval:
+            torch.save(self.model, f"{self.model.__class__.__name__}.pt")

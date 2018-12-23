@@ -1,7 +1,7 @@
 from torch import nn
 
 
-class GoalPredictor(nn.Module):
+class ValueFunctionModel(nn.Module):
     def __init__(self, input_count: int):
         super().__init__()
         self.input_count = input_count

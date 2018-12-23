@@ -5,11 +5,11 @@ import numpy as np
 import pandas as pd
 from carball.generated.api.game_pb2 import Game
 
-from value_function.batched_trainer import BatchTrainer
+from value_function.batch_trainer import BatchTrainer
 from data.calculated_local_dm import CalculatedLocalDM
 from data.utils.columns import PlayerColumn, BallColumn, GameColumn
 from data.utils.utils import filter_columns
-from value_function.goal_predictor import GoalPredictor
+from value_function.value_function_model import ValueFunctionModel
 
 logger = logging.getLogger(__name__)
 
@@ -85,7 +85,7 @@ def get_input_and_output_from_game_datas(df: pd.DataFrame, proto: Game) -> Tuple
 
 data_manager = CalculatedLocalDM(need_df=True, need_proto=True)
 INPUT_FEATURES = 61
-model = GoalPredictor(INPUT_FEATURES).cuda().train()
+model = ValueFunctionModel(INPUT_FEATURES).cuda().train()
 trainer = BatchTrainer(data_manager, model, get_input_and_output_from_game_datas)
 
 trainer.run()
