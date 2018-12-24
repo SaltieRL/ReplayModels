@@ -20,7 +20,7 @@ logger = logging.getLogger(__name__)
 class BatchTrainer:
     def __init__(self, data_manager: DataManager, model: nn.Module,
                  get_input_and_output_from_game_data: Callable[[pd.DataFrame, Game], Tuple[np.ndarray, np.ndarray]],
-                 trace: bool = True, eval_set_length: int = 10, save_on_eval: bool = True):
+                 loss_criterion: _Loss, trace: bool = True, eval_set_length: int = 2, save_on_eval: bool = True):
         self.data_manager = data_manager
         self.model = model
         self.get_input_and_output_from_game_data = get_input_and_output_from_game_data
@@ -28,7 +28,7 @@ class BatchTrainer:
         self.eval_set_length: int = eval_set_length
         self.save_on_eval: bool = save_on_eval
 
-        self.loss_criterion: _Loss = WeightedMSELoss()
+        self.loss_criterion: _Loss = loss_criterion
         self.optimizer: Optimizer = optim.Adam(self.model.parameters(), lr=1e-3)
 
         self.eval_set: List[str] = []

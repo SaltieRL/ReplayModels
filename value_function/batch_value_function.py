@@ -10,6 +10,7 @@ from data.calculated_local_dm import CalculatedLocalDM
 from data.utils.columns import PlayerColumn, BallColumn, GameColumn
 from data.utils.utils import filter_columns
 from value_function.value_function_model import ValueFunctionModel
+from value_function.weighted_loss import WeightedMSELoss
 
 logger = logging.getLogger(__name__)
 
@@ -55,7 +56,7 @@ def get_input_and_output_from_game_datas(df: pd.DataFrame, proto: Game) -> Tuple
     _df = _df[_df['game']['time_to_goal'] >= 0]
 
     # _df = _df[sorted_players]  # Same thing as below line
-    _df.reindex(columns=sorted_players[::-1], level=0)
+    _df.reindex(columns=sorted_players, level=0)
 
     # Set up data
     INPUT_COLUMNS = [
@@ -86,7 +87,7 @@ def get_input_and_output_from_game_datas(df: pd.DataFrame, proto: Game) -> Tuple
 data_manager = CalculatedLocalDM(need_df=True, need_proto=True)
 INPUT_FEATURES = 61
 model = ValueFunctionModel(INPUT_FEATURES).cuda().train()
-trainer = BatchTrainer(data_manager, model, get_input_and_output_from_game_datas)
+trainer = BatchTrainer(data_manager, model, get_input_and_output_from_game_datas, WeightedMSELoss())
 
 trainer.run()
 
