@@ -17,7 +17,7 @@ class BatchTrainer:
                  get_input_and_output_from_game_data: Callable[[pd.DataFrame, Game], Tuple[np.ndarray, np.ndarray]],
                  get_sample_weight: Callable[[np.ndarray], np.ndarray] = None,
                  batch_size: int = 1024,
-                 trace: bool = True, eval_set_length: int = 2, save_on_eval: bool = True):
+                 trace: bool = True, eval_set_length: int = 10, save_on_eval: bool = True):
         """
 
         :param data_manager:
