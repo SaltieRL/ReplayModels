@@ -2,7 +2,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 
-class LossPlotter:
+class PredictionPlotterPlot:
 
     def __init__(self):
         self.fig = plt.figure()

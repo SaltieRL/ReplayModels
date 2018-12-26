@@ -4,20 +4,20 @@ from typing import Tuple
 import numpy as np
 import pandas as pd
 from carball.generated.api.game_pb2 import Game
+from tensorflow.python.keras.callbacks import ModelCheckpoint, TensorBoard
 
-from value_function.batch_trainer import BatchTrainer
+from trainers.batch_trainer import BatchTrainer
 from data.calculated_local_dm import CalculatedLocalDM
 from data.utils.columns import PlayerColumn, BallColumn, GameColumn
 from data.utils.utils import filter_columns
+from trainers.callbacks.metric_tracer import MetricTracer
+from trainers.callbacks.prediction_plotter import PredictionPlotter
+from trainers.callbacks.tensorboard import get_tensorboard
 from value_function.value_function_model import ValueFunctionModel
-from value_function.weighted_loss import WeightedMSELoss
 
 logger = logging.getLogger(__name__)
 
 logging.basicConfig(level=logging.INFO)
-
-
-# data_manager = CalculatedDM(need_df=True, need_proto=True)
 
 
 def get_input_and_output_from_game_datas(df: pd.DataFrame, proto: Game) -> Tuple[np.ndarray, np.ndarray]:
@@ -53,7 +53,7 @@ def get_input_and_output_from_game_datas(df: pd.DataFrame, proto: Game) -> Tuple
     _df = _df.dropna(subset=[('game', 'goal_team')])
 
     # Remove post-goal frames
-    _df = _df[_df['game']['time_to_goal'] >= 0]
+    _df = _df[_df.loc[:, ('game', 'time_to_goal')] >= 0]
 
     # _df = _df[sorted_players]  # Same thing as below line
     _df.reindex(columns=sorted_players, level=0)
@@ -84,10 +84,20 @@ def get_input_and_output_from_game_datas(df: pd.DataFrame, proto: Game) -> Tuple
     return input_, output
 
 
+def get_sample_weight(output: np.ndarray) -> np.ndarray:
+    weights = np.ones_like(output)
+    # weights[output == 0.5] = 1 / np.sum(output == 0.5)
+    weights[output == 0.5] = 1 / 5
+
+    return weights.flatten()
+
 data_manager = CalculatedLocalDM(need_df=True, need_proto=True)
 INPUT_FEATURES = 61
-model = ValueFunctionModel(INPUT_FEATURES).cuda().train()
-trainer = BatchTrainer(data_manager, model, get_input_and_output_from_game_datas, WeightedMSELoss())
+model = ValueFunctionModel(INPUT_FEATURES)
 
-trainer.run()
+trainer = BatchTrainer(data_manager, model, get_input_and_output_from_game_datas, get_sample_weight)
 
+save_callback = ModelCheckpoint('value_function.{epoch:02d}-{val_loss:.5f}.hdf5', save_best_only=True)
+callbacks = [MetricTracer(), PredictionPlotter(), save_callback, get_tensorboard()]
+# callbacks = [MetricTracer(), PredictionPlotter(), TensorBoard()]
+trainer.run(callbacks=callbacks)

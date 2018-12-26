@@ -1,20 +1,26 @@
-from torch import nn
+from tensorflow.python.keras import Sequential
+from tensorflow.python.keras.layers import Dense, Dropout
+from tensorflow.python.keras.optimizers import Adam
+
+from models.base_model import BaseModel
 
 
-class ValueFunctionModel(nn.Module):
-    def __init__(self, input_count: int):
-        super().__init__()
-        self.input_count = input_count
-        self.layers = nn.Sequential(
-            nn.Linear(input_count, 512),
-            nn.Dropout(p=0.5),
-            nn.ReLU(),
-            nn.Linear(512, 128),
-            nn.ReLU(),
-            nn.Linear(128, 1),
-            nn.Sigmoid()
-        )
+class ValueFunctionModel(BaseModel):
+    def __init__(self, inputs: int):
+        super().__init__(inputs, 1)
 
-    def forward(self, game_state):
-        return self.layers(game_state)
+    def build_model(self) -> Sequential:
+        model = Sequential([
+            Dense(512, input_dim=self.inputs, activation='relu'),
+            Dropout(0.5),
+            Dense(512, activation='relu'),
+            Dropout(0.5),
+            Dense(128, activation='relu'),
+            Dropout(0.5),
+            Dense(1, activation='sigmoid')
+        ])
 
+        optimizer = Adam(lr=1e-3)
+
+        model.compile(loss='mse', optimizer=optimizer, metrics=['mae'])
+        return model

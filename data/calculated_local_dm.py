@@ -17,7 +17,6 @@ BASE_URL = 'https://calculated.gg/api/v1/'
 MIN_MMR = 1500
 PLAYLIST = 13
 
-
 CACHE_FOLDER = "cache"
 
 logger = logging.getLogger(__name__)
@@ -28,7 +27,9 @@ class CalculatedLocalDM(DataManager):
     Caches downloaded dfs and protos into a local directory.
     Keeps a list of known bad replay ids which fail when read.
     """
-    def __init__(self, need_proto: bool = False, need_df: bool = False, cache_path: str = None, normalise_df: bool = True):
+
+    def __init__(self, need_proto: bool = False, need_df: bool = False, cache_path: str = None,
+                 normalise_df: bool = True):
         """
         :param need_proto: Whether to load the .proto attribute when get_data is called.
         :param need_df: Whether to load the .df attribute when get_data is called.
@@ -36,6 +37,10 @@ class CalculatedLocalDM(DataManager):
         :param normalise_df: Whether to normalise the df when get_data is called.
         """
         super().__init__(need_proto, need_df, normalise_df)
+
+        # If get_replay_list is called with the same num, page is automatically incremented
+        self.last_num = None
+        self.page = 0
 
         # Ensure cache folder exists
         self.cache_path = cache_path if cache_path is not None else CACHE_FOLDER
@@ -51,7 +56,7 @@ class CalculatedLocalDM(DataManager):
             logger.info(f'Did not find any known bad ids')
             self.known_bad_ids = []
 
-    def get_replay_list(self, num: int = 50, page: int = 0) -> List[str]:
+    def get_replay_list(self, num: int = 50) -> List[str]:
         """
         Returns a list of replay ids.
         :param num:
@@ -61,7 +66,14 @@ class CalculatedLocalDM(DataManager):
             return different results. Should be set to 0 as a result to ensure all available replays can be gotten.
         :return: List of replay ids (str)
         """
-        r = requests.get(BASE_URL + f'replays?key=1&minmmr={MIN_MMR}&maxmmr=3000&playlist={PLAYLIST}&num={num}&page={page}')
+        r = requests.get(
+            BASE_URL + f'replays?key=1&minmmr={MIN_MMR}&maxmmr=3000&playlist={PLAYLIST}&num={num}&page={self.page}'
+        )
+        if num == self.last_num:
+            self.page += 1
+        else:
+            self.page = 0
+            self.last_num = num
         return [replay['hash'] for replay in r.json()['data']]
 
     def add_bad_id(self, id_: str):
