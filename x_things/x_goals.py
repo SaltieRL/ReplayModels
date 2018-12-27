@@ -4,13 +4,16 @@ from typing import Tuple
 import numpy as np
 import pandas as pd
 from carball.generated.api.game_pb2 import Game
-from carball.generated.api.player_pb2 import Player
-from torch.nn import BCELoss
+from tensorflow.python.keras.callbacks import ModelCheckpoint
 
 from data.calculated_local_dm import CalculatedLocalDM
 from data.utils.columns import PlayerColumn, BallColumn, GameColumn
 from data.utils.utils import filter_columns, flip_teams
-from value_function.batch_trainer import BatchTrainer
+from trainers.batch_trainer import BatchTrainer
+from trainers.callbacks.metric_tracer import MetricTracer
+from trainers.callbacks.prediction_plotter import PredictionPlotter
+from trainers.callbacks.tensorboard import get_tensorboard
+from x_things.x_goals_conv_model import XGoalsConvModel
 from x_things.x_things_model import XThingsModel
 
 logger = logging.getLogger(__name__)
@@ -20,24 +23,8 @@ logging.basicConfig(level=logging.INFO)
 
 def get_input_and_output_from_game_datas(df: pd.DataFrame, proto: Game) -> Tuple[np.ndarray, np.ndarray]:
     logger.debug('Getting input and output')
-    players = df.columns.levels[0]
-    teams = proto.teams
-    # team_map = {
-    #     player.id: team.is_orange
-    #     for team in teams
-    #     for player in team.player_ids
-    # }
+
     name_team_map = {player.name: player.is_orange for player in proto.players}
-
-    sorted_players = sorted(
-        [player for player in players if player not in ['ball', 'game']],
-        key=lambda x: name_team_map[x]
-    ) + ['ball', 'game']
-
-    _df = df.copy()
-
-    # _df = _df[sorted_players]  # Same thing as below line
-    _df.reindex(columns=sorted_players[::-1], level=0)
 
     # Set up data
     INPUT_COLUMNS = [
@@ -49,11 +36,11 @@ def get_input_and_output_from_game_datas(df: pd.DataFrame, proto: Game) -> Tuple
         BallColumn.VEL_X, BallColumn.VEL_Y, BallColumn.VEL_Z,
         GameColumn.SECONDS_REMAINING
     ]
-    filtered_df = filter_columns(_df, INPUT_COLUMNS).fillna(0).astype(float)
+    filtered_df = filter_columns(df, INPUT_COLUMNS).fillna(0).astype(float)
     filtered_df_orange = flip_teams(filtered_df)
 
-    name_map = {
-        player.id.id: player.name
+    player_id_to_player = {
+        player.id.id: player
         for player in proto.players
     }
 
@@ -61,14 +48,19 @@ def get_input_and_output_from_game_datas(df: pd.DataFrame, proto: Game) -> Tuple
     inputs = []
     outputs = []
     for hit in hits:
-        player_name = name_map[hit.player_id.id]
+        if not hit.shot:
+            continue
+        player_name = player_id_to_player[hit.player_id.id].name
 
         player = [player for player in proto.players if player.name == player_name][0]
 
         # Make player taking shot be blue
         _df = filtered_df_orange if player.is_orange else filtered_df
         # Get right frame
-        frame = _df.loc[hit.frame_number, :]
+        try:
+            frame = _df.loc[hit.frame_number + 1, :]
+        except KeyError:
+            frame = _df.loc[hit.frame_number, :]
 
         # Move player taking shot
         def key_fn(player_name: str) -> int:
@@ -81,11 +73,11 @@ def get_input_and_output_from_game_datas(df: pd.DataFrame, proto: Game) -> Tuple
                 return 2
 
         sorted_players = sorted(
-            [player for player in players if player not in ['ball', 'game']],
+            [player.name for player in proto.players],
             key=key_fn
         ) + ['ball', 'game']
-        frame.reindex(sorted_players[::-1], level=0)
 
+        frame = frame.reindex(sorted_players, level=0)
         inputs.append(frame.values)
         hit_output = [bool(getattr(hit, category)) for category in HIT_CATEGORIES]
         outputs.append(hit_output)
@@ -99,6 +91,15 @@ def get_input_and_output_from_game_datas(df: pd.DataFrame, proto: Game) -> Tuple
     return input_, output
 
 
+def get_sample_weight(output: np.ndarray):
+    weights = np.ones_like(output)
+    for output_category in (0, 1):
+        category_mask = output == output_category
+        if category_mask.any():
+            weights[category_mask] = 1 / np.sum(category_mask)
+    return weights.flatten()
+
+
 data_manager = CalculatedLocalDM(need_df=True, need_proto=True,
                                  cache_path=r"C:\Users\harry\Documents\rocket_league\ReplayModels\cache")
 INPUT_FEATURES = 61
@@ -106,7 +107,14 @@ INPUT_FEATURES = 61
 #                   'save', 'aerial']
 # HIT_CATEGORIES = ['pass_', 'shot', 'goal', 'aerial']
 HIT_CATEGORIES = ['goal']
-model = XThingsModel(INPUT_FEATURES, len(HIT_CATEGORIES)).cuda().train()
-trainer = BatchTrainer(data_manager, model, get_input_and_output_from_game_datas, BCELoss())
+# HIT_CATEGORIES = ['shot']
 
-trainer.run()
+# model = XThingsModel(INPUT_FEATURES, len(HIT_CATEGORIES))
+model = XGoalsConvModel(INPUT_FEATURES, len(HIT_CATEGORIES))
+# trainer = BatchTrainer(data_manager, model, get_input_and_output_from_game_datas)
+trainer = BatchTrainer(data_manager, model, get_input_and_output_from_game_datas, get_sample_weight)
+
+save_callback = ModelCheckpoint('x_goals.{epoch:02d}-{val_acc:.5f}.hdf5', save_best_only=True)
+callbacks = [MetricTracer(), PredictionPlotter(), save_callback, get_tensorboard()]
+trainer.run(replays_per_batch=20, minibatches_per_batch=5, callbacks=callbacks)
+# trainer.run(replays_per_batch=5, minibatches_per_batch=10, callbacks=callbacks)
