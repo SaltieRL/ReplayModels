@@ -10,26 +10,27 @@ DataColumn = Union[PlayerColumn, BallColumn, GameColumn]
 
 def flip_teams(df: pd.DataFrame):
     """
-    Modifies df in place so players' teams are effectively swapped.
+    Returns a new df where players' teams are effectively swapped.
     :param df: pd.DataFrame
     :return: the modified-in-place input pd.DataFrame
     """
+    _df = df.copy()
     players = [
-        name for name in df.columns.get_level_values(level=0).unique()
+        name for name in _df.columns.get_level_values(level=0).unique()
         if name != 'ball' and name != 'game'
     ]
     for player in players:
-        df.loc[:, (player, 'pos_x')] *= -1
-        df.loc[:, (player, 'pos_y')] *= -1
-        df.loc[:, (player, 'vel_x')] *= -1
-        df.loc[:, (player, 'vel_y')] *= -1
-        df.loc[:, (player, 'rot_z')] += np.pi
+        _df.loc[:, (player, 'pos_x')] *= -1
+        _df.loc[:, (player, 'pos_y')] *= -1
+        _df.loc[:, (player, 'vel_x')] *= -1
+        _df.loc[:, (player, 'vel_y')] *= -1
+        _df.loc[:, (player, 'rot_z')] += np.pi
 
-    df.loc[:, ('ball', 'pos_x')] *= -1
-    df.loc[:, ('ball', 'pos_y')] *= -1
-    df.loc[:, ('ball', 'vel_x')] *= -1
-    df.loc[:, ('ball', 'vel_y')] *= -1
-    return df
+    _df.loc[:, ('ball', 'pos_x')] *= -1
+    _df.loc[:, ('ball', 'pos_y')] *= -1
+    _df.loc[:, ('ball', 'vel_x')] *= -1
+    _df.loc[:, ('ball', 'vel_y')] *= -1
+    return _df
 
 
 def filter_columns(df: pd.DataFrame, columns: Sequence[DataColumn]):
