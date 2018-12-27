@@ -13,6 +13,7 @@ from data.utils.utils import filter_columns
 from trainers.callbacks.metric_tracer import MetricTracer
 from trainers.callbacks.prediction_plotter import PredictionPlotter
 from trainers.callbacks.tensorboard import get_tensorboard
+from value_function.value_function_conv_model import ValueFunctionConvModel
 from value_function.value_function_model import ValueFunctionModel
 
 logger = logging.getLogger(__name__)
@@ -93,7 +94,8 @@ def get_sample_weight(output: np.ndarray) -> np.ndarray:
 
 data_manager = CalculatedLocalDM(need_df=True, need_proto=True)
 INPUT_FEATURES = 61
-model = ValueFunctionModel(INPUT_FEATURES)
+# model = ValueFunctionModel(INPUT_FEATURES)
+model = ValueFunctionConvModel(INPUT_FEATURES)
 
 trainer = BatchTrainer(data_manager, model, get_input_and_output_from_game_datas, get_sample_weight)
 
