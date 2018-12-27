@@ -171,4 +171,8 @@ class BatchTrainer:
                         traceback.print_exc()
                         logger.error(e)
 
+                        batch_input = []
+                        batch_output = []
+                        batch_ids = []
+
         return generator()
