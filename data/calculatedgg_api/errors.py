@@ -1,0 +1,2 @@
+class BrokenDataFrameError(Exception):
+    pass

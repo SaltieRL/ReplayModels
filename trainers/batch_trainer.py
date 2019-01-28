@@ -87,6 +87,13 @@ class BatchTrainer:
                 try:
                     game_data = self.data_manager.get_data(replay_id)
                     inputs_, outputs = self.get_input_and_output_from_game_data(game_data.df, game_data.proto)
+                    if inputs_.shape[1] != self.model.inputs or outputs.shape[1] != self.model.outputs:
+                        logger.warning(
+                            f"Wrong input/output shape received from replay {replay_id}. " +
+                            f"Should be {None, self.model.inputs} and {None, self.model.outputs} but got " +
+                            f"{inputs_.shape} and {outputs.shape} for inputs and outputs array respectively."
+                        )
+                        continue
                     eval_inputs.append(inputs_)
                     eval_outputs.append(outputs)
                     self.eval_set.append(replay_id)
@@ -122,6 +129,14 @@ class BatchTrainer:
                         if df is None or proto is None:
                             continue
                         replay_input, replay_output = self.get_input_and_output_from_game_data(df, proto)
+
+                        if replay_input.shape[1] != self.model.inputs or replay_output.shape[1] != self.model.outputs:
+                            logger.warning(
+                                f"Wrong input/output shape received from replay {replay_id}. " +
+                                f"Should be {None, self.model.inputs} and {None, self.model.outputs} but got " +
+                                f"{replay_input.shape} and {replay_output.shape} for inputs and outputs array respectively."
+                            )
+                            continue
 
                         batch_input.append(replay_input)
                         batch_output.append(replay_output)
