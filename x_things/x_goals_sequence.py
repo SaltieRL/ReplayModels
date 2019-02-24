@@ -1,5 +1,6 @@
 import datetime
 import logging
+import random
 from typing import Tuple
 
 import numpy as np
@@ -65,8 +66,9 @@ def get_input_and_output_from_game_datas(df: pd.DataFrame, proto: Game) -> Tuple
         # Make player taking shot be blue
         _df = filtered_df_orange if player.is_orange else filtered_df
         # Get right frame
+
         try:
-            frame = _df.loc[hit.frame_number + 1, :]
+            frame = _df.loc[hit.frame_number - random.randrange(10), :]
         except KeyError:
             frame = _df.loc[hit.frame_number, :]
 
@@ -125,8 +127,8 @@ if __name__ == '__main__':
     model = XGoalsConvModel(INPUT_FEATURES, len(HIT_CATEGORIES))
 
     interfacer = CalculatedApiInterfacer(
-        CalculatedApiQueryParams(playlist=13, minmmr=1500,
-                                 start_timestamp=int(datetime.datetime(2018, 4, 1).timestamp()))
+        CalculatedApiQueryParams(playlist=13, minmmr=1350, maxmmr=1550,
+                                 start_timestamp=int(datetime.datetime(2018, 11, 1).timestamp()))
     )
     sequence = CalculatedSequence(
         interfacer=interfacer,

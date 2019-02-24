@@ -1,5 +1,5 @@
-from tensorflow.python.keras import Sequential
-from tensorflow.python.keras.layers import Dense, Conv1D, Reshape, Flatten
+from tensorflow.python.keras import Sequential, Input, Model
+from tensorflow.python.keras.layers import Dense, Conv1D, Reshape, Flatten, Dot, Concatenate
 from tensorflow.python.keras.optimizers import Adam
 
 from models.base_model import BaseModel
@@ -12,10 +12,9 @@ class XGoalsConvModel(BaseModel):
     def build_model(self) -> Sequential:
         model = Sequential([
             Reshape((self.inputs, 1), input_shape=(self.inputs,)),
-            Conv1D(filters=1024, kernel_size=9),
-            Conv1D(filters=1024, kernel_size=6),
-            Conv1D(filters=1024, kernel_size=3),
+            Conv1D(filters=1024, kernel_size=3, strides=3, padding="same"),
             Flatten(data_format='channels_last'),
+            # Dense(1024, activation='relu', input_shape=(self.inputs,)),
             Dense(512, activation='relu'),
             Dense(128, activation='relu'),
             Dense(self.outputs, activation='sigmoid')
