@@ -1,4 +1,6 @@
+import datetime
 import logging
+import random
 from typing import Tuple
 
 import numpy as np
@@ -6,24 +8,27 @@ import pandas as pd
 from carball.generated.api.game_pb2 import Game
 from tensorflow.python.keras.callbacks import ModelCheckpoint
 
-from data.calculated_local_dm import CalculatedLocalDM
+from data.calculatedgg_api.api_interfacer import CalculatedApiInterfacer
+from data.calculatedgg_api.query_params import CalculatedApiQueryParams
 from data.utils.columns import PlayerColumn, BallColumn, GameColumn
-from data.utils.utils import filter_columns, flip_teams
-from trainers.batch_trainer import BatchTrainer
+from data.utils.utils import filter_columns, flip_teams, normalise_df
 from trainers.callbacks.metric_tracer import MetricTracer
-from trainers.callbacks.prediction_plotter import PredictionPlotter
+from trainers.callbacks.metrics import ClassificationMetrics
 from trainers.callbacks.tensorboard import get_tensorboard
+from trainers.sequences.calculated_sequence import CalculatedSequence
 from x_things.x_goals_conv_model import XGoalsConvModel
-from x_things.x_things_model import XThingsModel
 
 logger = logging.getLogger(__name__)
 
 logging.basicConfig(level=logging.INFO)
+logging.getLogger("carball").setLevel(logging.CRITICAL)
+logging.getLogger("data.base_data_manager").setLevel(logging.WARNING)
 
 
-def get_input_and_output_from_game_datas(df: pd.DataFrame, proto: Game) -> Tuple[np.ndarray, np.ndarray]:
+def get_input_and_output_from_game_datas(df: pd.DataFrame, proto: Game) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
     logger.debug('Getting input and output')
 
+    df = normalise_df(df, inplace=True)
     name_team_map = {player.name: player.is_orange for player in proto.players}
 
     # Set up data
@@ -48,8 +53,8 @@ def get_input_and_output_from_game_datas(df: pd.DataFrame, proto: Game) -> Tuple
     inputs = []
     outputs = []
     for hit in hits:
-        if not hit.shot:
-            continue
+        # if not hit.shot:
+        #     continue
         player_name = player_id_to_player[hit.player_id.id].name
 
         player = [player for player in proto.players if player.name == player_name][0]
@@ -57,8 +62,9 @@ def get_input_and_output_from_game_datas(df: pd.DataFrame, proto: Game) -> Tuple
         # Make player taking shot be blue
         _df = filtered_df_orange if player.is_orange else filtered_df
         # Get right frame
+
         try:
-            frame = _df.loc[hit.frame_number + 1, :]
+            frame = _df.loc[hit.frame_number - random.randrange(10), :]
         except KeyError:
             frame = _df.loc[hit.frame_number, :]
 
@@ -88,7 +94,10 @@ def get_input_and_output_from_game_datas(df: pd.DataFrame, proto: Game) -> Tuple
     logger.debug(f'Got input and output: input shape: {input_.shape}, output shape:{output.shape}')
     assert not np.any(np.isnan(input_)), "input contains nan"
     assert not np.any(np.isnan(output)), "output contains nan"
-    return input_, output
+
+    assert INPUT_FEATURES in input_.shape, f"input has shape {input_.shape}, expected: {INPUT_FEATURES}."
+
+    return input_, output, get_sample_weight(output)
 
 
 def get_sample_weight(output: np.ndarray):
@@ -100,8 +109,6 @@ def get_sample_weight(output: np.ndarray):
     return weights.flatten()
 
 
-data_manager = CalculatedLocalDM(need_df=True, need_proto=True,
-                                 cache_path=r"C:\Users\harry\Documents\rocket_league\ReplayModels\cache")
 INPUT_FEATURES = 61
 # HIT_CATEGORIES = ['pass_', 'passed', 'dribble', 'dribble_continuation', 'shot', 'goal', 'assist', 'assisted',
 #                   'save', 'aerial']
@@ -109,12 +116,35 @@ INPUT_FEATURES = 61
 HIT_CATEGORIES = ['goal']
 # HIT_CATEGORIES = ['shot']
 
-# model = XThingsModel(INPUT_FEATURES, len(HIT_CATEGORIES))
-model = XGoalsConvModel(INPUT_FEATURES, len(HIT_CATEGORIES))
-# trainer = BatchTrainer(data_manager, model, get_input_and_output_from_game_datas)
-trainer = BatchTrainer(data_manager, model, get_input_and_output_from_game_datas, get_sample_weight)
 
-save_callback = ModelCheckpoint('x_goals.{epoch:02d}-{val_acc:.5f}.hdf5', save_best_only=True)
-callbacks = [MetricTracer(), PredictionPlotter(), save_callback, get_tensorboard()]
-trainer.run(replays_per_batch=20, minibatches_per_batch=5, callbacks=callbacks)
-# trainer.run(replays_per_batch=5, minibatches_per_batch=10, callbacks=callbacks)
+if __name__ == '__main__':
+    # filepath = r"x_goals.440-0.91998.hdf5"
+    # model = XGoalsConvModel(INPUT_FEATURES, len(HIT_CATEGORIES), load_from_filepath=filepath)
+    model = XGoalsConvModel(INPUT_FEATURES, len(HIT_CATEGORIES))
+
+    interfacer = CalculatedApiInterfacer(
+        CalculatedApiQueryParams(playlist=13, minmmr=1350, maxmmr=1550,
+                                 start_timestamp=int(datetime.datetime(2018, 11, 1).timestamp()))
+    )
+    sequence = CalculatedSequence(
+        interfacer=interfacer,
+        game_data_transformer=get_input_and_output_from_game_datas,
+    )
+
+    EVAL_COUNT = 50
+    eval_sequence = sequence.create_eval_sequence(EVAL_COUNT)
+    eval_inputs, eval_outputs, _UNUSED_eval_weights = eval_sequence.as_arrays()
+
+    save_callback = ModelCheckpoint('x_goals.{epoch:02d}-{val_acc:.5f}.hdf5', monitor='val_acc', save_best_only=True)
+    classificaion_metrics = ClassificationMetrics((eval_inputs, eval_outputs))
+    callbacks = [
+        classificaion_metrics,
+        MetricTracer(),
+        save_callback,
+        get_tensorboard(),
+        # PredictionPlotter(model.model),
+    ]
+    model.fit_generator(sequence,
+                        steps_per_epoch=500,
+                        validation_data=eval_sequence, epochs=1000, callbacks=callbacks,
+                        workers=4, use_multiprocessing=True)

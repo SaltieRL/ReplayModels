@@ -1,27 +1,31 @@
+import datetime
 import logging
 from typing import Tuple
 
 import numpy as np
 import pandas as pd
 from carball.generated.api.game_pb2 import Game
-from tensorflow.python.keras.callbacks import ModelCheckpoint, TensorBoard
+from tensorflow.python.keras.callbacks import ModelCheckpoint
 
-from trainers.batch_trainer import BatchTrainer
-from data.calculated_local_dm import CalculatedLocalDM
+from data.calculatedgg_api.api_interfacer import CalculatedApiInterfacer
+from data.calculatedgg_api.query_params import CalculatedApiQueryParams
 from data.utils.columns import PlayerColumn, BallColumn, GameColumn
 from data.utils.utils import filter_columns
 from trainers.callbacks.metric_tracer import MetricTracer
 from trainers.callbacks.prediction_plotter import PredictionPlotter
 from trainers.callbacks.tensorboard import get_tensorboard
+from trainers.sequences.calculated_sequence import CalculatedSequence
 from value_function.value_function_conv_model import ValueFunctionConvModel
 from value_function.value_function_model import ValueFunctionModel
 
 logger = logging.getLogger(__name__)
 
 logging.basicConfig(level=logging.INFO)
+logging.getLogger("carball").setLevel(logging.CRITICAL)
+logging.getLogger("data.base_data_manager").setLevel(logging.WARNING)
 
 
-def get_input_and_output_from_game_datas(df: pd.DataFrame, proto: Game) -> Tuple[np.ndarray, np.ndarray]:
+def get_input_and_output_from_game_datas(df: pd.DataFrame, proto: Game) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
     logger.debug('Getting input and output')
     players = df.columns.levels[0]
     teams = proto.teams
@@ -47,7 +51,9 @@ def get_input_and_output_from_game_datas(df: pd.DataFrame, proto: Game) -> Tuple
     goal_team = goal_number.apply(lambda x: goal_teams_list[int(x)])
     goal_time = goal_number.apply(lambda x: goal_times_list[int(x)])
 
-    _df = df.copy()
+    # Only train on 1/3 of the frames - reduce extremely similar frames
+    _df = df.sample(frac=0.3)
+
     _df[('game', 'goal_team')] = goal_team.rename('goal_team')
     _df[('game', 'goal_time')] = goal_time.rename('goal_time')
     _df[('game', 'time_to_goal')] = _df.loc[:, ('game', 'goal_time')] - _df.loc[:, ('game', 'time')]
@@ -82,7 +88,7 @@ def get_input_and_output_from_game_datas(df: pd.DataFrame, proto: Game) -> Tuple
     output = output.values.reshape((-1, 1))
     input_ = input_.values
     logger.debug(f'Got input and output: input shape: {input_.shape}, output shape:{output.shape}')
-    return input_, output
+    return input_, output, get_sample_weight(output)
 
 
 def get_sample_weight(output: np.ndarray) -> np.ndarray:
@@ -92,14 +98,35 @@ def get_sample_weight(output: np.ndarray) -> np.ndarray:
 
     return weights.flatten()
 
-data_manager = CalculatedLocalDM(need_df=True, need_proto=True)
+
 INPUT_FEATURES = 61
-# model = ValueFunctionModel(INPUT_FEATURES)
-model = ValueFunctionConvModel(INPUT_FEATURES)
 
-trainer = BatchTrainer(data_manager, model, get_input_and_output_from_game_datas, get_sample_weight)
 
-save_callback = ModelCheckpoint('value_function.{epoch:02d}-{val_loss:.5f}.hdf5', save_best_only=True)
-callbacks = [MetricTracer(), PredictionPlotter(), save_callback, get_tensorboard()]
-# callbacks = [MetricTracer(), PredictionPlotter(), TensorBoard()]
-trainer.run(callbacks=callbacks)
+if __name__ == '__main__':
+    model = ValueFunctionConvModel(INPUT_FEATURES)
+    # model = ValueFunctionModel(INPUT_FEATURES)
+
+    interfacer = CalculatedApiInterfacer(
+        CalculatedApiQueryParams(playlist=13, minmmr=1500, maxmmr=1550,
+                                 start_timestamp=int(datetime.datetime(2018, 11, 1).timestamp()))
+    )
+    sequence = CalculatedSequence(
+        interfacer=interfacer,
+        game_data_transformer=get_input_and_output_from_game_datas,
+    )
+
+    EVAL_COUNT = 5
+    eval_sequence = sequence.create_eval_sequence(EVAL_COUNT)
+    eval_inputs, eval_outputs, _UNUSED_eval_weights = eval_sequence.as_arrays()
+
+    save_callback = ModelCheckpoint('value_function.{epoch:02d}-{val_loss:.5f}.hdf5', save_best_only=True)
+    callbacks = [
+        MetricTracer(),
+        save_callback,
+        get_tensorboard(),
+        # PredictionPlotter(model.model),
+    ]
+    model.fit_generator(sequence,
+                        steps_per_epoch=500,
+                        validation_data=eval_sequence, epochs=1000, callbacks=callbacks,
+                        workers=4, use_multiprocessing=True)

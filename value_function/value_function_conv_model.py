@@ -12,17 +12,14 @@ class ValueFunctionConvModel(BaseModel):
     def build_model(self) -> Sequential:
         model = Sequential([
             Reshape((self.inputs, 1), input_shape=(self.inputs,)),
-            Conv1D(filters=512, kernel_size=3),
+            Conv1D(filters=512, kernel_size=3, strides=3, padding="same"),
             Flatten(data_format='channels_last'),
-            Dropout(0.5),
-            Dense(512, activation='relu'),
-            Dropout(0.5),
+            Dense(256, activation='relu'),
             Dense(128, activation='relu'),
-            Dropout(0.5),
             Dense(1, activation='sigmoid')
         ])
 
-        optimizer = Adam(lr=1e-3)
+        optimizer = Adam(lr=1e-4)
 
         model.compile(loss='mse', optimizer=optimizer, metrics=['mae'])
         return model

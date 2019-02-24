@@ -19,7 +19,7 @@ class PredictionPlotter(Callback):
     (and thus before any of the existing methods of the base class, including even set_model())
     """
 
-    def __init__(self, plot_every_x_steps: int = 20):
+    def __init__(self, model: Sequential, plot_every_x_steps: int = 20):
         super().__init__()
         self.plot_every_x_steps = plot_every_x_steps
         self.plot = PredictionPlotterPlot()
@@ -32,15 +32,14 @@ class PredictionPlotter(Callback):
         self.var_y_true = tf.Variable(0., validate_shape=False)
         self.var_y_pred = tf.Variable(0., validate_shape=False)
 
+        self._initialise_variables(model)
+
     def _initialise_variables(self, model):
         fetches = [tf.assign(self.var_y_true, model.targets[0], validate_shape=False),
                    tf.assign(self.var_y_pred, model.outputs[0], validate_shape=False)]
 
         model._function_kwargs = {'fetches': fetches}
         # use `model._function_kwargs` if using `Model` instead of `Sequential`
-
-    def on_run_begin(self, model: Sequential):
-        self._initialise_variables(model)
 
     def on_batch_end(self, batch, logs=None):
         self.targets.append(K.eval(self.var_y_true))

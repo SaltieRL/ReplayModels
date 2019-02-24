@@ -64,9 +64,6 @@ class BatchTrainer:
         :return:
         """
         callbacks = [] if callbacks is None else callbacks
-        for callback in callbacks:
-            if callable(getattr(callback, "on_run_begin", None)):
-                callback.on_run_begin(self.model.model)
 
         generator = self._get_generator(replays_per_batch, minibatches_per_batch)
         steps_per_epoch = minibatches_per_batch * batches_per_epoch

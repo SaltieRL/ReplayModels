@@ -20,7 +20,7 @@ class ValueFunctionModel(BaseModel):
             Dense(1, activation='sigmoid')
         ])
 
-        optimizer = Adam(lr=1e-3)
+        optimizer = Adam(lr=1e-4)
 
         model.compile(loss='mse', optimizer=optimizer, metrics=['mae'])
         return model
