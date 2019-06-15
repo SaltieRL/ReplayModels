@@ -7,16 +7,14 @@ import pandas as pd
 from carball.generated.api.game_pb2 import Game
 from tensorflow.python.keras.callbacks import ModelCheckpoint
 
-from data.calculatedgg_api.api_interfacer import CalculatedApiInterfacer
-from data.calculatedgg_api.query_params import CalculatedApiQueryParams
+from data.interfacers.calculatedgg_api.api_interfacer import CalculatedApiInterfacer
+from data.interfacers.calculatedgg_api.query_params import CalculatedApiQueryParams
 from data.utils.columns import PlayerColumn, BallColumn, GameColumn
 from data.utils.utils import filter_columns
 from trainers.callbacks.metric_tracer import MetricTracer
-from trainers.callbacks.prediction_plotter import PredictionPlotter
 from trainers.callbacks.tensorboard import get_tensorboard
 from trainers.sequences.calculated_sequence import CalculatedSequence
 from value_function.value_function_conv_model import ValueFunctionConvModel
-from value_function.value_function_model import ValueFunctionModel
 
 logger = logging.getLogger(__name__)
 

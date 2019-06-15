@@ -10,14 +10,17 @@ from carball.analysis.utils.proto_manager import ProtobufManager
 from carball.generated.api.game_pb2 import Game
 from requests import Response
 
-from data.calculatedgg_api.errors import BrokenDataFrameError
-from data.calculatedgg_api.query_params import CalculatedApiQueryParams
+from data.interfacers.base_interfacer import BaseInterfacer
+from data.interfacers.calculatedgg_api.errors import BrokenDataFrameError
+from data.interfacers.calculatedgg_api.query_params import CalculatedApiQueryParams
 
 logger = logging.getLogger(__name__)
 
 
-class CalculatedApiInterfacer:
+class CalculatedApiInterfacer(BaseInterfacer):
     BASE_URL = 'https://calculated.gg/api/v1/'
+    PROTO_URL = 'https://storage.googleapis.com/calculatedgg-proto/'
+    REPLAY_DF_URL = 'https://storage.googleapis.com/calculatedgg-parsed/'
 
     def __init__(self, query_params: CalculatedApiQueryParams = CalculatedApiQueryParams()):
         self.initial_query_params = query_params
@@ -55,8 +58,8 @@ class CalculatedApiInterfacer:
         return r
 
     def get_replay_proto(self, replay_id: str) -> Game:
-        url = self.BASE_URL + f'parsed/{replay_id}.replay.pts'
-        r = requests.get(url, params={'key': self.query_params.key})
+        url = self.PROTO_URL + f'{replay_id}.replay.pts'
+        r = requests.get(url)
         r.raise_for_status()
         file = io.BytesIO(r.content)
         proto = ProtobufManager.read_proto_out_from_file(file)
@@ -64,8 +67,8 @@ class CalculatedApiInterfacer:
         return proto
 
     def get_replay_df(self, replay_id: str) -> pd.DataFrame:
-        url = self.BASE_URL + f'parsed/{replay_id}.replay.gzip'
-        r = requests.get(url, params={'key': self.query_params.key})
+        url = self.REPLAY_DF_URL + f'{replay_id}.replay.gzip'
+        r = requests.get(url)
         r.raise_for_status()
         gzip_file = gzip.GzipFile(fileobj=io.BytesIO(r.content), mode='rb')
         df = PandasManager.safe_read_pandas_to_memory(gzip_file)

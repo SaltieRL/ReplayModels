@@ -5,8 +5,8 @@ import unittest
 from carball.generated.api.game_pb2 import Game
 from requests import HTTPError
 
-from data.calculatedgg_api.api_interfacer import CalculatedApiInterfacer
-from data.calculatedgg_api.query_params import CalculatedApiQueryParams
+from data.interfacers.calculatedgg_api.api_interfacer import CalculatedApiInterfacer
+from data.interfacers.calculatedgg_api.query_params import CalculatedApiQueryParams
 
 
 class ApiInterfacerTest(unittest.TestCase):

@@ -7,8 +7,8 @@ import pandas as pd
 from carball.generated.api.game_pb2 import Game
 from tensorflow.python.keras.utils import Sequence
 
-from data.calculatedgg_api.api_interfacer import CalculatedApiInterfacer
-from data.calculatedgg_api.errors import BrokenDataFrameError
+from data.interfacers.base_interfacer import BaseInterfacer
+from data.interfacers.calculatedgg_api.errors import BrokenDataFrameError
 
 logger = logging.getLogger(__name__)
 
@@ -17,7 +17,7 @@ GameDataToArraysTransformer = Callable[[pd.DataFrame, Game],
 
 
 class CalculatedSequence(Sequence):
-    def __init__(self, interfacer: CalculatedApiInterfacer,
+    def __init__(self, interfacer: BaseInterfacer,
                  game_data_transformer: GameDataToArraysTransformer,
                  replay_ids: List[str] = None):
         self.interfacer = interfacer

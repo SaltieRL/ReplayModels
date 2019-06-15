@@ -1,6 +1,8 @@
 import datetime
 import logging
 import random
+from enum import Enum, auto
+from functools import partial
 from typing import Tuple
 
 import numpy as np
@@ -8,8 +10,8 @@ import pandas as pd
 from carball.generated.api.game_pb2 import Game
 from tensorflow.python.keras.callbacks import ModelCheckpoint
 
-from data.calculatedgg_api.api_interfacer import CalculatedApiInterfacer
-from data.calculatedgg_api.query_params import CalculatedApiQueryParams
+from data.interfacers.calculatedgg_api.api_interfacer import CalculatedApiInterfacer
+from data.interfacers.calculatedgg_api.query_params import CalculatedApiQueryParams
 from data.utils.columns import PlayerColumn, BallColumn, GameColumn
 from data.utils.utils import filter_columns, flip_teams, normalise_df
 from trainers.callbacks.metric_tracer import MetricTracer
@@ -25,7 +27,14 @@ logging.getLogger("carball").setLevel(logging.CRITICAL)
 logging.getLogger("data.base_data_manager").setLevel(logging.WARNING)
 
 
-def get_input_and_output_from_game_datas(df: pd.DataFrame, proto: Game) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+class WeightMethod(Enum):
+    OUTPUT_CATEGORY = auto()
+    EMPHASISE_SHOTS = auto()
+
+
+def get_input_and_output_from_game_datas(df: pd.DataFrame, proto: Game,
+                                         weight_method: WeightMethod = WeightMethod.OUTPUT_CATEGORY) -> Tuple[
+    np.ndarray, np.ndarray, np.ndarray]:
     logger.debug('Getting input and output')
 
     df = normalise_df(df, inplace=True)
@@ -36,7 +45,7 @@ def get_input_and_output_from_game_datas(df: pd.DataFrame, proto: Game) -> Tuple
         PlayerColumn.POS_X, PlayerColumn.POS_Y, PlayerColumn.POS_Z,
         PlayerColumn.ROT_X, PlayerColumn.ROT_Y, PlayerColumn.ROT_Z,
         PlayerColumn.VEL_X, PlayerColumn.VEL_Y, PlayerColumn.VEL_Z,
-        # PlayerColumn.ANG_VEL_X, PlayerColumn.ANG_VEL_Y, PlayerColumn.ANG_VEL_Z,
+        PlayerColumn.ANG_VEL_X, PlayerColumn.ANG_VEL_Y, PlayerColumn.ANG_VEL_Z,
         BallColumn.POS_X, BallColumn.POS_Y, BallColumn.POS_Z,
         BallColumn.VEL_X, BallColumn.VEL_Y, BallColumn.VEL_Z,
         GameColumn.SECONDS_REMAINING
@@ -52,6 +61,9 @@ def get_input_and_output_from_game_datas(df: pd.DataFrame, proto: Game) -> Tuple
     hits = proto.game_stats.hits
     inputs = []
     outputs = []
+    if weight_method == WeightMethod.EMPHASISE_SHOTS:
+        weights = []
+
     for hit in hits:
         # if not hit.shot:
         #     continue
@@ -61,10 +73,10 @@ def get_input_and_output_from_game_datas(df: pd.DataFrame, proto: Game) -> Tuple
 
         # Make player taking shot be blue
         _df = filtered_df_orange if player.is_orange else filtered_df
-        # Get right frame
 
+        # Get right frame
         try:
-            frame = _df.loc[hit.frame_number - random.randrange(10), :]
+            frame = _df.loc[hit.frame_number - random.randint(1, 10), :]
         except KeyError:
             frame = _df.loc[hit.frame_number, :]
 
@@ -74,9 +86,11 @@ def get_input_and_output_from_game_datas(df: pd.DataFrame, proto: Game) -> Tuple
             if player_name == player.name:
                 return 0
             elif name_team_map[player_name] == player.is_orange:
-                return 1
+                # return 1
+                return random.randint(1, 10)  # randomises teammates order
             else:
-                return 2
+                # return 2
+                return random.randint(11, 50)  # randomises opponents order
 
         sorted_players = sorted(
             [player.name for player in proto.players],
@@ -87,9 +101,13 @@ def get_input_and_output_from_game_datas(df: pd.DataFrame, proto: Game) -> Tuple
         inputs.append(frame.values)
         hit_output = [bool(getattr(hit, category)) for category in HIT_CATEGORIES]
         outputs.append(hit_output)
+        if weight_method == WeightMethod.EMPHASISE_SHOTS:
+            weights.append(10 if hit.shot else 1)
 
     input_ = np.array(inputs, dtype=np.float32)
     output = np.array(outputs, dtype=np.float32)
+    if weight_method == WeightMethod.EMPHASISE_SHOTS:
+        weights = np.array(weights, dtype=np.float32)
 
     logger.debug(f'Got input and output: input shape: {input_.shape}, output shape:{output.shape}')
     assert not np.any(np.isnan(input_)), "input contains nan"
@@ -97,7 +115,10 @@ def get_input_and_output_from_game_datas(df: pd.DataFrame, proto: Game) -> Tuple
 
     assert INPUT_FEATURES in input_.shape, f"input has shape {input_.shape}, expected: {INPUT_FEATURES}."
 
-    return input_, output, get_sample_weight(output)
+    if weight_method == WeightMethod.OUTPUT_CATEGORY:
+        weights = get_sample_weight(output)
+
+    return input_, output, weights
 
 
 def get_sample_weight(output: np.ndarray):
@@ -109,7 +130,7 @@ def get_sample_weight(output: np.ndarray):
     return weights.flatten()
 
 
-INPUT_FEATURES = 61
+INPUT_FEATURES = 79
 # HIT_CATEGORIES = ['pass_', 'passed', 'dribble', 'dribble_continuation', 'shot', 'goal', 'assist', 'assisted',
 #                   'save', 'aerial']
 # HIT_CATEGORIES = ['pass_', 'shot', 'goal', 'aerial']
@@ -118,20 +139,19 @@ HIT_CATEGORIES = ['goal']
 
 
 if __name__ == '__main__':
-    # filepath = r"x_goals.440-0.91998.hdf5"
-    # model = XGoalsConvModel(INPUT_FEATURES, len(HIT_CATEGORIES), load_from_filepath=filepath)
     model = XGoalsConvModel(INPUT_FEATURES, len(HIT_CATEGORIES))
 
     interfacer = CalculatedApiInterfacer(
-        CalculatedApiQueryParams(playlist=13, minmmr=1350, maxmmr=1550,
+        # CalculatedApiQueryParams(playlist=13, minmmr=1350, maxmmr=1550,
+        CalculatedApiQueryParams(playlist=13, minmmr=1500,
                                  start_timestamp=int(datetime.datetime(2018, 11, 1).timestamp()))
     )
     sequence = CalculatedSequence(
         interfacer=interfacer,
-        game_data_transformer=get_input_and_output_from_game_datas,
+        game_data_transformer=partial(get_input_and_output_from_game_datas, weight_method=WeightMethod.OUTPUT_CATEGORY),
     )
 
-    EVAL_COUNT = 50
+    EVAL_COUNT = 100
     eval_sequence = sequence.create_eval_sequence(EVAL_COUNT)
     eval_inputs, eval_outputs, _UNUSED_eval_weights = eval_sequence.as_arrays()
 
@@ -145,6 +165,6 @@ if __name__ == '__main__':
         # PredictionPlotter(model.model),
     ]
     model.fit_generator(sequence,
-                        steps_per_epoch=500,
+                        steps_per_epoch=1000,
                         validation_data=eval_sequence, epochs=1000, callbacks=callbacks,
                         workers=4, use_multiprocessing=True)

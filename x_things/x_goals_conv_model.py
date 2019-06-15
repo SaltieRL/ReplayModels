@@ -20,7 +20,7 @@ class XGoalsConvModel(BaseModel):
             Dense(self.outputs, activation='sigmoid')
         ])
 
-        optimizer = Adam(lr=1e-4)
+        optimizer = Adam(lr=3e-4)
 
         model.compile(loss='binary_crossentropy', optimizer=optimizer, metrics=['accuracy'])
         return model
