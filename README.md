@@ -16,6 +16,10 @@ for a given playlist and min MMR.
 Use `batched_value_function.py` which uses the refactorised class `BatchTrainer`.
 Running it should cache replay dataframes and protos, and plot loss with quicktracer. 
 
+## data_main.py
+Run this script to either download or convert replay files.
+Doing this relies on the config.ini file in data/
+
 
 
 
