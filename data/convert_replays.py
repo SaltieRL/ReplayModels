@@ -142,7 +142,6 @@ def add_game_columns(gdf, goal_frames, goal_seconds, goal_teams):
     score_0 = np.empty([0])
     score_1 = np.empty([0])
     until_goal = np.array([300])
-
     score = [0, 0]
     index = 0
     for i in range(len(goal_frames)):
@@ -241,7 +240,7 @@ def reporting(shared, interval_mins):
     except(KeyboardInterrupt):
         print("Exiting Reporting")
 
-    print(" err_analysis_index: {}\n err_analysis_key: {}\n err_analysis_rattletrap: {}\nerr_analysis_unbound: {}\n err_analysis_other: {}\n err_gdf_index: {}\n".format(
+    print("err_analysis_index: {}\nerr_analysis_key: {}\nerr_analysis_rattletrap: {}\nerr_analysis_unbound: {}\nerr_analysis_other: {}\nerr_gdf_index: {}\n".format(
         shared[0].value, shared[1].value, shared[2].value, shared[3].value, shared[4].value, shared[5].value))
     
 
@@ -401,9 +400,7 @@ def pre_process_parallel(num_processes, test_ratio = .1, overwrite = False, verb
         if not os.path.exists(p):
             os.makedirs(p)
             print("Created directories in {}".format(p))
-    #
-    #This function is turning games into csv's. It cleans the dataframe up but retains coherence across the entire game.
-    #
+
     #Get file names
     in_files = os.listdir(replay_path)
     out_files = os.listdir(csv_path)
@@ -473,7 +470,7 @@ def pre_process_parallel(num_processes, test_ratio = .1, overwrite = False, verb
             test_files = in_files[:num_test]
             in_files = in_files[num_test:]
             processes.append(Process(target=replays_to_csv, args =(test_files, testcsv_path, shared)))
-            #If only 1 process just do it all and return
+            #If only 1 process just do it all and return (Pretend you didn't see this code)
             num_processes -= 1
             if num_processes == 0:
                 processes[0].start()
@@ -481,6 +478,7 @@ def pre_process_parallel(num_processes, test_ratio = .1, overwrite = False, verb
                 if verbose_interval >0:
                     with shared[6].get_lock():
                         shared[6].value += 2
+                        #Look away
                     r.start()
                 processes[0].join()
                 process= Process(target=replays_to_csv, args =(in_files, csv_path, shared))
