@@ -243,6 +243,7 @@ def reporting(shared, interval_mins):
             "Starting Reporting\n    There are {} total replays.\n    There are {} replays left to process. ({}%)\n".format(
                 in_len, remaining, round(remaining / in_len, 2) * 100))
         sys.stdout.flush()
+        time.sleep(10)
         average = [timedelta(0), 0]
         errors = shared[0].value + shared[1].value + shared[2].value + shared[3].value + shared[4].value + shared[
             5].value
@@ -363,7 +364,7 @@ def replays_to_csv(in_files: List[str], output_path: str, shared: List[Value]):
                 # Order the columns of the df
                 gdf = gdf[ordered_cols]
 
-                # Determine if the game has on overtime
+                # Determine if the game has overtime
                 if (gdf.iloc[-1].game_seconds_remaining == 0) or (0 not in gdf['game_seconds_remaining']):
                     game_has_overtime = False
                 else:
@@ -422,22 +423,23 @@ def replays_to_csv(in_files: List[str], output_path: str, shared: List[Value]):
 
                 # Change active values to boolean
                 gdf['z_0_jump_active'] = ((gdf['z_0_jump_active'] % 2) != 0).astype(int)
-                gdf['o_0_jump_active'] = ((gdf['z_0_jump_active'] % 2) != 0).astype(int)
-                gdf['z_0_double_jump_active'] = ((gdf['z_0_jump_active'] % 2) != 0).astype(int)
-                gdf['z_0_double_jump_active'] = ((gdf['z_0_jump_active'] % 2) != 0).astype(int)
-                gdf['z_0_dodge_active'] = ((gdf['z_0_jump_active'] % 2) != 0).astype(int)
-                gdf['o_0_dodge_active'] = ((gdf['z_0_jump_active'] % 2) != 0).astype(int)
+                gdf['o_0_jump_active'] = ((gdf['o_0_jump_active'] % 2) != 0).astype(int)
+                gdf['z_0_double_jump_active'] = ((gdf['z_0_double_jump_active'] % 2) != 0).astype(int)
+                gdf['o_0_double_jump_active'] = ((gdf['o_0_double_jump_active'] % 2) != 0).astype(int)
+                gdf['z_0_dodge_active'] = ((gdf['z_0_dodge_active'] % 2) != 0).astype(int)
+                gdf['o_0_dodge_active'] = ((gdf['o_0_dodge_active'] % 2) != 0).astype(int)
                 # TODO: Check if anything needs to be filled with a non-zero value?
-
                 # Convert all booleans to 0 or 1
                 gdf = gdf.replace({True: 1, False: 0})
                 # Now we need to handle the duplicates from kickoffs
                 gdf = gdf.drop_duplicates()
+                # Reduce size in memory by ~half
+                # (Not handling booleans differently ex: player_jump_active: True -> 1 -> 1.0)
+                gdf = gdf.astype('float32')
                 # Write out to CSV
                 gdf.to_csv(output_path + file.split('.')[0] + '.csv')
                 file_average[1] += 1
                 file_average[0] += (datetime.now() - file_start)
-                # print("{} Writing out to {}".format(current_process().name, output_path))
                 sys.stdout.flush()
             except(KeyboardInterrupt, SystemExit):
                 break
@@ -504,11 +506,12 @@ def pre_process_parallel(num_processes, test_ratio=.1, overwrite=False, verbose_
         if file in in_files:
             in_files.remove(file)
             err_count += 1
+
+    print("Skipping {} files recorded as causing errors or meeting criteria to be skipped.".format(err_count))
+    print("There are {} existing output CSV's that don't correspond with a replay file.".format(extraneous))
     if len(in_files) == 0:
         print("No replays left to process")
         return
-    print("Skipping {} files recorded as causing errors or meeting criteria to be skipped.".format(err_count))
-    print("There are {} existing output CSV's that don't correspond with a replay file.".format(extraneous))
     # Remove duplicate CSV's in test and out (from out)
     duplicates = 0
     for file in out_test:
@@ -529,8 +532,7 @@ def pre_process_parallel(num_processes, test_ratio=.1, overwrite=False, verbose_
               err_analysis_unbound, err_analysis_other, err_gdf_index, running_processes]
     processes: List[Process] = []
     if verbose_interval > 0:
-        r = Process(target=reporting, args=(shared, verbose_interval))
-        processes.append(r)
+        reporter = Process(target=reporting, args=(shared, verbose_interval))
     # Randomly get test set
     random.shuffle(in_files)
     if test_ratio is not 0:
@@ -559,7 +561,10 @@ def pre_process_parallel(num_processes, test_ratio=.1, overwrite=False, verbose_
 
     # Split up the work and start processes
     workloads = np.array_split(in_files, num_processes)
-
+    if verbose_interval > 0:
+        reporter.start()
+        # Sleep just so that reporter prints more accurately :)
+        time.sleep(1.5)
     for i in range(num_processes):
         processes.append(Process(target=replays_to_csv, args=(workloads[i], csv_path, shared)))
     for p in processes:
@@ -568,5 +573,6 @@ def pre_process_parallel(num_processes, test_ratio=.1, overwrite=False, verbose_
             shared[6].value += 1
     for p in processes:
         p.join()
-
+    if verbose_interval > 0:
+        reporter.join()
     return
