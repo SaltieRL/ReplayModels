@@ -243,6 +243,7 @@ def reporting(shared, interval_mins):
             "Starting Reporting\n    There are {} total replays.\n    There are {} replays left to process. ({}%)\n".format(
                 in_len, remaining, round(remaining / in_len, 2) * 100))
         sys.stdout.flush()
+        # Un-fancy way to ensure the first print is accurate, wait for other processes to start. Fancy method is not much better and more lines.
         time.sleep(10)
         average = [timedelta(0), 0]
         errors = shared[0].value + shared[1].value + shared[2].value + shared[3].value + shared[4].value + shared[
