@@ -71,7 +71,7 @@ def get_ordered_columns(players_per_team: int) -> List[str]:
     x = players_per_team
     non_player = ['ball_pos_x', 'ball_pos_y', 'ball_pos_z', 'ball_rot_x', 'ball_rot_y', 'ball_rot_z',
                   'ball_vel_x', 'ball_vel_y', 'ball_vel_z', 'ball_ang_vel_x', 'ball_ang_vel_y', 'ball_ang_vel_z',
-                  'game_seconds_remaining']
+                  'game_seconds_remaining', 'game_goal_number']
     z_zero = ['z_0_pos_x', 'z_0_pos_y', 'z_0_pos_z', 'z_0_rot_x', 'z_0_rot_y', 'z_0_rot_z',
               'z_0_vel_x', 'z_0_vel_y', 'z_0_vel_z', 'z_0_ang_vel_x', 'z_0_ang_vel_y', 'z_0_ang_vel_z',
               'z_0_boost', 'z_0_boost_active', 'z_0_jump_active', 'z_0_double_jump_active', 'z_0_dodge_active',
@@ -97,7 +97,26 @@ def get_ordered_columns(players_per_team: int) -> List[str]:
     return columns_ordered
 
 
-def get_structures(proto_game, gdf: pd.DataFrame):
+def shrink_df(input_df):
+    """
+    Shrink a dataframes size in memory while minimizing data loss.
+    :param input_df: The input game dataframe
+    :type input_df: pd.DataFrame
+    :return: A copy of the dataframe, with column types changed.
+    :rtype: pd.DataFrame
+    """
+    df = input_df.copy(deep=True)
+    sub_dict = {"pos": [1, np.int16], "rot": [1000, np.int16], "vel": [1, np.int16], "boost": [1, np.uint8],
+                "active": [1, np.int8], "next": [1, np.int8], "is": [1, np.int8],
+                "sec": [1, np.int16], "score": [1, np.int8]}
+    for sub, ops in sub_dict.items():
+        cols = [col for col in df.columns if sub in col]
+        for col in cols:
+            df[col] = (df[col] * ops[0]).astype(ops[1])
+    return df
+
+
+def restructure_and_get_goals(proto_game, gdf: pd.DataFrame):
     """
     Rename and reorder gdf columns and create structures to continue converting the gdf.
     :param proto_game: protobuf data from analysis object
@@ -110,41 +129,37 @@ def get_structures(proto_game, gdf: pd.DataFrame):
     # Init structures from json
     goal_seconds, goal_frames, goal_scorers, goal_teams = [], [], [], []
     # Player Data
-    z_team_names, o_team_names = [], []
+    # ~1 in 3 games have the blue team as team "1" instead of "0". We have to fix the team order in these cases.
+    team_names = [[], []]
     game = proto_game.game_metadata
+    if proto_game.teams[1].is_orange:
+        team_index = [0, 1]
+    else:  # Reverse the indexing
+        team_index = [1, 0]
+
+    for player in proto_game.players:
+        if player.is_orange:
+            team_names[team_index[1]].append(player.name)
+        else:
+            team_names[team_index[0]].append(player.name)
+
     for goal in game.goals:
         goal_frames.append(goal.frame_number)
         goal_scorers.append(goal.player_id)  # Currently unused
         if goal.player_id in proto_game.teams[0].player_ids:
-            goal_teams.append(0)
+            goal_teams.append(team_index[0])
         elif goal.player_id in proto_game.teams[1].player_ids:
-            goal_teams.append(1)
-        else:
-            return "Error"
-    # Make blue team always team zero
-    for player in proto_game.players:
-        if proto_game.teams[1].is_orange:
-            if player.is_orange:
-                o_team_names.append(player.name)
-            else:
-                z_team_names.append(player.name)
-        else:
-            if player.is_orange:
-                z_team_names.append(player.name)
-            else:
-                o_team_names.append(player.name)
-    # Fix DF columns
-    gdf.columns = gdf.columns.to_flat_index()
+            goal_teams.append(team_index[1])
     # Dictionary for rename
     rename_dict = {}
     for tup in gdf.columns:
         # Need to change all the player values and make them in order
-        if tup[0] in z_team_names:
-            i = z_team_names.index(tup[0])
+        if tup[0] in team_names[0]:
+            i = team_names[0].index(tup[0])
             sub = 'z_' + str(i) + '_' + tup[1]
 
-        elif tup[0] in o_team_names:
-            i = o_team_names.index(tup[0])
+        elif tup[0] in team_names[1]:
+            i = team_names[1].index(tup[0])
             sub = 'o_' + str(i) + '_' + tup[1]
 
         else:
@@ -357,19 +372,34 @@ def replays_to_csv(in_files: List[str], output_path: str, shared: List[Value]):
                     finally:
                         if e:
                             copyfile(replay_path + file, error_path + file)
-                            print("Copied to err")
 
                 proto_game = analysis.get_protobuf_data()
                 gdf = analysis.get_data_frame()
-                goal_seconds, goal_frames, goal_scorers, goal_teams, gdf = get_structures(proto_game, gdf)
+                # Check if game has overtime, and skip it if it has extra columns (very rare, but can happen)
+                gdf.columns = gdf.columns.to_flat_index()
+                game_has_overtime = False
+                if len(gdf.columns) != 65:
+                    if len(gdf.columns) == 66:
+                        if ('game', 'is_overtime') in gdf.columns:
+                            game_has_overtime = True
+                        else:
+                            copyfile(replay_path + file, skip_path + file)
+                            continue
+
+                goal_seconds, goal_frames, goal_scorers, goal_teams, gdf = restructure_and_get_goals(proto_game, gdf)
+
+                # Skip if no goals or if game is too short
+                # Take this out or change it depending on how much you care about dataset quality
+                if 210 not in gdf['game_seconds_remaining']:
+                    copyfile(replay_path + file, skip_path + file)
+                    continue
+
+                if len(goal_frames) == 0:
+                    copyfile(replay_path + file, skip_path + file)
+                    assert (len(proto_game.game_metadata.goals) == 0)
+                    continue
                 # Order the columns of the df
                 gdf = gdf[ordered_cols]
-
-                # Determine if the game has overtime
-                if (gdf.iloc[-1].game_seconds_remaining == 0) or (0 not in gdf['game_seconds_remaining']):
-                    game_has_overtime = False
-                else:
-                    game_has_overtime = True
                 # Get times of each goal
                 try:
                     for i in goal_frames:
@@ -378,9 +408,9 @@ def replays_to_csv(in_files: List[str], output_path: str, shared: List[Value]):
                     with shared[5].get_lock():
                         shared[5].value += 1
                     copyfile(replay_path + file, error_path + file)
-                    print("Error")
+                    print('Index Error')
                     continue
-                # Currently skipping overtimes
+                # Skip overtimes.
                 if game_has_overtime:
                     if len(goal_seconds) == 1:
                         copyfile(replay_path + file, skip_path + file)
@@ -388,18 +418,14 @@ def replays_to_csv(in_files: List[str], output_path: str, shared: List[Value]):
                     else:
                         goal_seconds = goal_seconds[:-1]
                         goal_frames = goal_frames[:-1]
-                #
+
                 trunc_length = add_game_columns(gdf, goal_frames, goal_seconds, goal_teams)
-                #
+
                 # Fixing up missing values and rows after the last goal
                 gdf = gdf.truncate(after=trunc_length - 1)
                 # Drop when all player values are NA
-                sub = ['z_0_pos_x', 'o_0_pos_x']
-                if NUM_PLAYERS > 1:
-                    sub.extend(['z_1_pos_x', 'o_1_pos_x'])
-                    if NUM_PLAYERS > 2:
-                        sub.extend(['z_2_pos_x', 'o_2_pos_x'])
-                gdf = gdf.dropna(how='all', subset=sub)
+                sub = ['z_0_pos_x', 'o_0_pos_x', 'z_1_pos_x', 'o_1_pos_x', 'z_2_pos_x', 'o_2_pos_x']
+                gdf = gdf.dropna(how='all', subset=sub[:NUM_PLAYERS*2])
                 # forward fill demos (Single player NA), then fill empty values (Ball values)
                 for team in ['z_', 'o_']:
                     for i in range(NUM_PLAYERS):
@@ -414,14 +440,12 @@ def replays_to_csv(in_files: List[str], output_path: str, shared: List[Value]):
                         for _ in fill_list:
                             gdf.loc[:, fill_list] = gdf.loc[:, fill_list].ffill(axis=0)
 
+                # Drop the time after a goal is scored but before reset (in these casesm game_goal_number is N/A)
+                gdf = gdf.dropna(axis='index', subset=['game_goal_number'])
+                gdf = gdf.drop(['game_goal_number'], axis=1)
+                gdf = gdf[gdf['secs_to_goal'] > 0]
                 # Fill rest of NA value with 0
                 gdf = gdf.fillna(0)
-                # Drop the time after a goal is scored but before reset
-                # (Delete rows where ball velocities are zero but ball x,y is not zero)
-                gdf.drop(gdf[(gdf['ball_vel_x'] == 0) & (gdf['ball_vel_y'] == 0) & (gdf['ball_vel_z'] == 0) &
-                             (gdf['ball_pos_x'] != 0) & (gdf['ball_pos_y'] != 0) & (gdf['ball_pos_z'] != 0)].index,
-                         inplace=True)
-
                 # Change active values to boolean
                 gdf['z_0_jump_active'] = ((gdf['z_0_jump_active'] % 2) != 0).astype(int)
                 gdf['o_0_jump_active'] = ((gdf['o_0_jump_active'] % 2) != 0).astype(int)
@@ -429,15 +453,11 @@ def replays_to_csv(in_files: List[str], output_path: str, shared: List[Value]):
                 gdf['o_0_double_jump_active'] = ((gdf['o_0_double_jump_active'] % 2) != 0).astype(int)
                 gdf['z_0_dodge_active'] = ((gdf['z_0_dodge_active'] % 2) != 0).astype(int)
                 gdf['o_0_dodge_active'] = ((gdf['o_0_dodge_active'] % 2) != 0).astype(int)
-                # TODO: Check if anything needs to be filled with a non-zero value?
                 # Convert all booleans to 0 or 1
                 gdf = gdf.replace({True: 1, False: 0})
-                # Now we need to handle the duplicates from kickoffs
-                gdf = gdf.drop_duplicates()
-                # Reduce size in memory by ~half
-                # (Not handling booleans differently ex: player_jump_active: True -> 1 -> 1.0)
-                gdf = gdf.astype('float32')
-                # Write out to CSV
+                # Reduce size in memory
+                # Write out to CSV after shrinking
+                gdf = shrink_df(gdf)
                 gdf.to_csv(output_path + file.split('.')[0] + '.csv')
                 file_average[1] += 1
                 file_average[0] += (datetime.now() - file_start)
@@ -564,8 +584,6 @@ def pre_process_parallel(num_processes, test_ratio=.1, overwrite=False, verbose_
     workloads = np.array_split(in_files, num_processes)
     if verbose_interval > 0:
         reporter.start()
-        # Sleep just so that reporter prints more accurately :)
-        time.sleep(1.5)
     for i in range(num_processes):
         processes.append(Process(target=replays_to_csv, args=(workloads[i], csv_path, shared)))
     for p in processes:
