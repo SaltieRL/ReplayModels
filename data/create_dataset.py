@@ -48,7 +48,7 @@ def dataset(output_file=None, test=False, max_games=None, ram_max=75):
     """
     Concatenate CSVs designated by the config into a dataset.
     :param ram_max: When RAM usage hits this percentage, start a new chunk. Actual RAM usage at this point will only be half the max.
-    :type ram_max: int (0-100)
+    :type ram_max: int
     :param output_file: An output filename. Generated automatically if None.
     :type output_file: Optional[str]
     :param test: If the dataset will be a test set.
@@ -94,9 +94,7 @@ def dataset(output_file=None, test=False, max_games=None, ram_max=75):
     random.shuffle(dfs)
     new = True
     append_list = []
-    bad_list = []
     chunk_time = datetime.now()
-    # Easily get structure of columns with first df
     print("Starting")
     for df in dfs:
         game = pd.read_csv(df)
