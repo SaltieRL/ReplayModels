@@ -32,8 +32,10 @@ def main():
             elif nargs == 6:
                 output = sys.argv[5]
             else:
-                print("dataset usage: dataset <0 (No test set) | 1 (with test set) | 2 (only test set)> <max_games | 0> <chunk_size | 0> [output_filename]")
-                print("Each csv is a single game. Chunk size refers to rows/frames, not games. Actual chunk_size is always >= this param (it overshoots)")
+                print("dataset usage: dataset <0 (No test set) | 1 (with test set) | 2 (only test set)> <max_games | 0> <ram_percent> [output_filename]")
+                print("max_games: Each csv is a single game. ")
+                print("ram_percent: RAM usage cap to avoid memory errors. Max this out with trial and error, if you want good shuffling.")
+                print("    NOTE: After hitting the cap, RAM usage of the program will spike beyond the cap. So '100' probably won't work.")
                 print("output_filename overrides the default naming.")
                 print("ex: dataset 1 1000 250000")
                 return
@@ -43,21 +45,22 @@ def main():
                 mg = int(sys.argv[3])
 
             if int(sys.argv[4]) == 0:
-                cs = None
+                ram = None
             else:
-                cs = int(sys.argv[4])
+                ram = int(sys.argv[4])
             t_int = int(sys.argv[2])
             if t_int >= 1:
-                dataset(output_file=output, test=True, max_games=mg, chunk_size=cs)
+                dataset(output_file=output, test=True, max_games=mg, ram_max=ram)
             if t_int <= 1:
-                dataset(output_file=output, test=False, max_games=mg, chunk_size=cs)
+                dataset(output_file=output, test=False, max_games=mg, ram_max=ram)
 
     else:
         print("Usage: download | convert | dataset")
+        print("['optional_arg'] <'required_arg'> '|' -> 'or'")
         print("download: download [max_replays]")
         print("convert: convert <num_processes> <test_ratio>  <verbose_interval>")
         print(
-            "dataset: dataset <0 (No test set) | 1 (with test set) | 2 (only test set)> <max_games | 0> <chunk_size | 0>")
+            "dataset: dataset <0 (No test set) | 1 (with test set) | 2 (only test set)> <max_games | 0> <ram_percent> [output_filename]")
 
 
 if __name__ == "__main__":
